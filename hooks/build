@@ -1,20 +1,28 @@
 #!/bin/bash
 
+# Allow our docker build to add Open Containers-style labels
 # See: https://github.com/opencontainers/image-spec/blob/main/annotations.md
-
-BASE_IMAGE="${BASE_IMAGE:-}"
-if [ -z "${BASE_IMAGE}" ]; then
-    BASE_IMAGE="debian:11-slim"
-fi
 
 BUILD_TIMESTAMP="$(date --rfc-3339=seconds)"
 SAFE_TIMESTAMP="$(echo $BUILD_TIMESTAMP | sed 's/ /T/g' | sed 's/:/-/g' | sed 's/\+.*//')"
 SOURCE_URL="$(git remote get-url origin || true)"
-
 VERSION_TAG="${SOURCE_BRANCH}_v${SAFE_TIMESTAMP}-${SOURCE_COMMIT}"
-if [[ "${DOCKER_TAG:-}" != "latest" ]]; then
+DOCKER_TAG="${DOCKER_TAG:-}"
+if [[ "${DOCKER_TAG}" != "latest" ]]; then
     VERSION_TAG="${DOCKER_TAG}_${VERSION_TAG}"
+fi
 
+# Derive the BASE_IMAGE argument from the DOCKER_TAG
+BASE_IMAGE="debian:11-slim"
+if [[ $DOCKER_TAG  =~ ^python- ]]; then
+    BASE_IMAGE=$(echo "${DOCKER_TAG}" | sed 's/^python-/python:/')
+elif [[ $DOCKER_TAG =~ ^r-base- ]]; then
+    BASE_IMAGE=$(echo "${DOCKER_TAG}" | sed 's/^r-base-/r-base:/')
+elif [[ $DOCKER_TAG =~ ^tomcat- ]]; then
+    BASE_IMAGE=$(echo "${DOCKER_TAG}" | sed 's/^tomcat-/tomcat:/')
+fi
+
+# Build our customised docker image
 docker build --pull \
     --build-arg "BASE_IMAGE=${BASE_IMAGE}" \
     --label "org.opencontainers.image.authors=${BUILD_AUTHORS:-CSIRO eReefs Team}" \
