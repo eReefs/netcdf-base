@@ -4,6 +4,7 @@ Docker base image definition for an environment that includes specific versions 
 
 - [Build Arguments](#build-arguments)
 - [Usage Example](#usage-example)
+- [Pre-built docker images](#pre-built-docker-images)
 
 
 &nbsp;
@@ -52,3 +53,15 @@ docker build --pull \
 The build may take quite a while, as installing all these packages from source is not a speedy operation!
 
 &nbsp;
+
+## Pre-built docker images
+
+The [CSIRO Coastal Informatics Team](https://research.csiro.au/coastal-informatics/) have an automated docker build that publishes images derived from this repository to DockerHub at [onaci/ereefs-netcdf-base](https://hub.docker.com/r/onaci/ereefs-netcdf-base).
+
+The variants that are built each time a commit is pushed to the `main` branch of this repository are:
+
+- `onaci/ereefs-netcdf-base:latest`  uses all default build arguments, so is based on `debian:11-slim`
+- `onaci/ereefs-netcdf-base:python-3.11-slim-bullseye`  is built with `--build-arg BASE_IMAGE=python:3.11-slim-bullseye`
+- `onaci/ereefs-netcdf-base:r-base-4.3.1` is built with `--build-arg BASE_IMAGE=r-base:4.3.1`
+
+If you have need for a pre-built image that uses a different base image, please [raise a ticket](https://github.com/eReefs/netcdf-base/issues), and we will see what we can do.
