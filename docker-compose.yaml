@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  python-netcdf-base:
+    build:
+      context: .
+      args:
+        BASE_IMAGE: "python:${PYTHON_VERSION}-slim-bullseye"
+        CURL_VERSION: "${CURL_VERSION}"
+        DAP_VERSION: "${DAP_VERSION}"
+        HDF5_VERSION: "${HDF5_VERSION}"
+        NETCDF_VERSION: "${NETCDF_VERSION}"
+        NCO_VERSION: "${NCO_VERSION}"
+    command: "env"
+    entrypoint: ["bash", "-c"]
+    image: "onaci/ereefs-netcdf-base:python${PYTHON_VERSION}-curl${CURL_VERSION}-dap${DAP_VERSION}-hdf5${HDF5_VERSION}-netcdf${NETCDF_VERSION}-nco${NCO_VERSION}"
+
+  r-netcdf-base:
+    build:
+      context: .
+      args:
+        BASE_IMAGE: "r-base:${R_VERSION}"
+        CURL_VERSION: "${CURL_VERSION}"
+        DAP_VERSION: "${DAP_VERSION}"
+        HDF5_VERSION: "${HDF5_VERSION}"
+        NETCDF_VERSION: "${NETCDF_VERSION}"
+        NCO_VERSION: "${NCO_VERSION}"
+    command: "env"
+    entrypoint: ["bash", "-c"]
+    image: "onaci/ereefs-netcdf-base:r${R_VERSION}-curl${CURL_VERSION}-dap${DAP_VERSION}-hdf5${HDF5_VERSION}-netcdf${NETCDF_VERSION}-nco${NCO_VERSION}"
