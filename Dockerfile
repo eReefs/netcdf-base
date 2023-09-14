@@ -11,8 +11,9 @@ FROM ${BASE_IMAGE}
 ARG BASE_IMAGE
 LABEL org.opencontainers.image.base.name=${BASE_IMAGE}
 
-# Enable Bash in RUN commands
-SHELL [ "/bin/bash", "-c"]
+# Enable Bash in RUN commands, and ensure that any commands with
+# pipes exit on the first failure.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Upgrade any packages and libraries already pre-installed by the base image
 RUN apt-get update \
