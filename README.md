@@ -11,7 +11,7 @@ Docker base image definition for an environment that includes specific versions 
 
 The canonical location for the Dockerfile described here is <https://github.com/eReefs/netcdf-base>
 
-Pre-compiled Docker images have been configured by the CSIRO Coastal Informatics Team](https://research.csiro.au/coastal-informatics/), and can be obtained from [onaci/ereefs-netcdf-base](https://hub.docker.com/r/onaci/ereefs-netcdf-base), with a selection of base-images, including:
+Pre-compiled Docker images have been configured by the [CSIRO Coastal Informatics Team](https://research.csiro.au/coastal-informatics/), and can be obtained from [onaci/ereefs-netcdf-base](https://hub.docker.com/r/onaci/ereefs-netcdf-base), with a selection of base-images, including:
 
 - `debian:12-slim`
 - `python:3.11-slim-bookworm`
