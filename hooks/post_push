@@ -1,3 +1,5 @@
+#!/bin/bash
+
 VERSION_TAG="$(docker image inspect  --format '{{ index .Config.Labels "org.opencontainers.image.version"}}' $IMAGE_NAME || true)"
 if [ -n "${VERSION_TAG}" ]; then
     IMAGE_TAGGED="${DOCKER_REPO}:${VERSION_TAG}"

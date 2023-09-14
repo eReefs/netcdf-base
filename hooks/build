@@ -7,19 +7,20 @@ BUILD_TIMESTAMP="$(date --rfc-3339=seconds)"
 SAFE_TIMESTAMP="$(echo $BUILD_TIMESTAMP | sed 's/ /T/g' | sed 's/:/-/g' | sed 's/\+.*//')"
 SOURCE_URL="$(git remote get-url origin || true)"
 VERSION_TAG="${SOURCE_BRANCH}_v${SAFE_TIMESTAMP}-${SOURCE_COMMIT}"
-DOCKER_TAG="${DOCKER_TAG:-}"
-if [[ "${DOCKER_TAG}" != "latest" ]]; then
-    VERSION_TAG="${DOCKER_TAG}_${VERSION_TAG}"
-fi
 
-# Derive the BASE_IMAGE argument from the DOCKER_TAG
-BASE_IMAGE="debian:11-slim"
-if [[ $DOCKER_TAG  =~ ^python- ]]; then
-    BASE_IMAGE=$(echo "${DOCKER_TAG}" | sed 's/^python-/python:/')
-elif [[ $DOCKER_TAG =~ ^r-base- ]]; then
-    BASE_IMAGE=$(echo "${DOCKER_TAG}" | sed 's/^r-base-/r-base:/')
-elif [[ $DOCKER_TAG =~ ^tomcat- ]]; then
-    BASE_IMAGE=$(echo "${DOCKER_TAG}" | sed 's/^tomcat-/tomcat:/')
+# Identify our BASE_IMAGE argument
+BASE_IMAGE="debian:12-slim"
+DOCKER_TAG="${DOCKER_TAG:-}"
+if [[ -n "${DOCKER_TAG}" ]] && [[ "${DOCKER_TAG}" != "latest" ]]; then
+    # Prepend the non-default docker tag to the versioned docker tag
+    VERSION_TAG="${DOCKER_TAG}_${VERSION_TAG}"
+
+    # Derive the BASE_IMAGE from the DOCKER_TAG
+    if [[ $DOCKER_TAG =~ ^r-base- ]]; then
+        BASE_IMAGE=$(echo "${DOCKER_TAG}" | sed 's/^r-base-/r-base:/')
+    else
+        BASE_IMAGE=$(echo "${DOCKER_TAG}" | sed 's/\-/:/1')
+    fi
 fi
 
 # Build our customised docker image

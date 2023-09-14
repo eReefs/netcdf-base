@@ -5,15 +5,17 @@ services:
     build:
       context: .
       args:
-        BASE_IMAGE: "python:${PYTHON_VERSION}-slim-bullseye"
+        BASE_IMAGE: "python:${PYTHON_VERSION}-slim-bookworm"
         CURL_VERSION: "${CURL_VERSION}"
         DAP_VERSION: "${DAP_VERSION}"
+        GDAL_VERSION: "${GDAL_VERSION}"
         HDF5_VERSION: "${HDF5_VERSION}"
         NETCDF_VERSION: "${NETCDF_VERSION}"
         NCO_VERSION: "${NCO_VERSION}"
-    command: "env"
-    entrypoint: ["bash", "-c"]
-    image: "onaci/ereefs-netcdf-base:python${PYTHON_VERSION}-curl${CURL_VERSION}-dap${DAP_VERSION}-hdf5${HDF5_VERSION}-netcdf${NETCDF_VERSION}-nco${NCO_VERSION}"
+        PROJ_VERSION: "${PROJ_VERSION}"
+    command: "'tail -f /dev/null'"
+    entrypoint: ["/bin/bash", "-c"]
+    image: "onaci/ereefs-netcdf-base:python-${PYTHON_VERSION}-slim-bookworm"
 
   r-netcdf-base:
     build:
@@ -22,9 +24,11 @@ services:
         BASE_IMAGE: "r-base:${R_VERSION}"
         CURL_VERSION: "${CURL_VERSION}"
         DAP_VERSION: "${DAP_VERSION}"
+        GDAL_VERSION: "${GDAL_VERSION}"
         HDF5_VERSION: "${HDF5_VERSION}"
         NETCDF_VERSION: "${NETCDF_VERSION}"
         NCO_VERSION: "${NCO_VERSION}"
-    command: "env"
+        PROJ_VERSION: "${PROJ_VERSION}"
+    command: "'tail -f /dev/null'"
     entrypoint: ["bash", "-c"]
-    image: "onaci/ereefs-netcdf-base:r${R_VERSION}-curl${CURL_VERSION}-dap${DAP_VERSION}-hdf5${HDF5_VERSION}-netcdf${NETCDF_VERSION}-nco${NCO_VERSION}"
+    image: "onaci/ereefs-netcdf-base:r-base-${R_VERSION}"
