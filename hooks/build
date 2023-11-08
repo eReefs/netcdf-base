@@ -13,7 +13,7 @@ VERSION_TAG="${SOURCE_BRANCH}_v${SAFE_TIMESTAMP}-${SOURCE_COMMIT}"
 
 # Treat most DOCKER_TAG values as overrides for the
 # BASE_IMAGE variable sourced from the .env file
-if [[ -n "${DOCKER_TAG}" ]] && [[ "${DOCKER_TAG}" != "latest" ]]; then
+if [[ -n "${DOCKER_TAG}" ]] && [[ "${DOCKER_TAG}" != "latest" ]] && [[ "${DOCKER_TAG}" != "ems" ]]; then
     # Prepend the non-default docker tag to the versioned docker tag
     VERSION_TAG="${DOCKER_TAG}_${VERSION_TAG}"
 
