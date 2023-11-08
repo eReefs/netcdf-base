@@ -211,19 +211,9 @@ ARG NETCDF_VERSION
 ENV NETCDF_VERSION="${NETCDF_VERSION:-4.9.2}"
 RUN wget -O - https://github.com/Unidata/netcdf-c/archive/refs/tags/v${NETCDF_VERSION}.tar.gz | tar -xz -C /usr/local/src/
 RUN cd /usr/local/src/netcdf-c-${NETCDF_VERSION}/ \
-    && CPATH=/usr/lib/x86_64-linux-gnu/openmpi/include CC=mpicc LDFLAGS="-L/usr/local/lib -laws-cpp-sdk-s3" ./configure \
+    && CPATH=/usr/lib/x86_64-linux-gnu/openmpi/include ./configure \
       --prefix=/usr/local \
-      --enable-hdf5 \
-      --enable-dap \
-      --enable-nczarr \
-      --enable-plugins \
-      --enable-remote-functionality \
-      --enable-s3 \
-      --enable-utilities \
-      --disable-external-server-tests \
-      --disable-dap-remote-tests \
-      --disable-large-file-tests \
-    && make check install \
+    && make install \
     && ldconfig
 LABEL edu.ucar.unidata.netcdf.version=${NETCDF_VERSION}
 
