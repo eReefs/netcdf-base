@@ -15,7 +15,7 @@ Pre-compiled Docker images have been configured by the [CSIRO Coastal Informatic
 
 - `debian:12-slim`
 - `python:3.11-slim-bookworm`
-- `r-base:4.3.1`
+- `rocker/r-ver:4`
 
 If you have need for a pre-built image that uses a different base image, please [raise a ticket](https://github.com/eReefs/netcdf-base/issues), and we will see what we can do.
 

@@ -1,11 +1,11 @@
 version: "3.8"
 
 services:
-  python-netcdf-base:
+  netcdf-base:
     build:
       context: .
       args:
-        BASE_IMAGE: "python:${PYTHON_VERSION}-slim-bookworm"
+        BASE_IMAGE: "${BASE_IMAGE}"
         CURL_VERSION: "${CURL_VERSION}"
         DAP_VERSION: "${DAP_VERSION}"
         GDAL_VERSION: "${GDAL_VERSION}"
@@ -15,20 +15,5 @@ services:
         PROJ_VERSION: "${PROJ_VERSION}"
     command: "'tail -f /dev/null'"
     entrypoint: ["/bin/bash", "-c"]
-    image: "onaci/ereefs-netcdf-base:python-${PYTHON_VERSION}-slim-bookworm"
+    image: "onaci/ereefs-netcdf-base:dev"
 
-  r-netcdf-base:
-    build:
-      context: .
-      args:
-        BASE_IMAGE: "r-base:${R_VERSION}"
-        CURL_VERSION: "${CURL_VERSION}"
-        DAP_VERSION: "${DAP_VERSION}"
-        GDAL_VERSION: "${GDAL_VERSION}"
-        HDF5_VERSION: "${HDF5_VERSION}"
-        NETCDF_VERSION: "${NETCDF_VERSION}"
-        NCO_VERSION: "${NCO_VERSION}"
-        PROJ_VERSION: "${PROJ_VERSION}"
-    command: "'tail -f /dev/null'"
-    entrypoint: ["bash", "-c"]
-    image: "onaci/ereefs-netcdf-base:r-base-${R_VERSION}"
