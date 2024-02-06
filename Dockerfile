@@ -285,6 +285,7 @@ RUN mkdir -p /usr/local/src/gdal-${GDAL_VERSION}/build \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr/local \
         -DMPI_INCLUDE_PATH=/usr/lib/x86_64-linux-gnu/openmpi/include \
+        -DGDAL_SET_INSTALL_RELATIVE_RPATH=ON \
         -DGDAL_USE_BLOSC=ON \
         -DGDAL_USE_CURL=ON \
         -DGDAL_USE_GEOTIFF=ON \
