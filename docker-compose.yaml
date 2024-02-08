@@ -5,15 +5,15 @@ services:
     build:
       context: .
       args:
-        BASE_IMAGE: "${BASE_IMAGE}"
-        CURL_VERSION: "${CURL_VERSION}"
-        DAP_VERSION: "${DAP_VERSION}"
-        GDAL_VERSION: "${GDAL_VERSION}"
-        HDF5_VERSION: "${HDF5_VERSION}"
-        NETCDF_VERSION: "${NETCDF_VERSION}"
-        NCO_VERSION: "${NCO_VERSION}"
-        PROJ_VERSION: "${PROJ_VERSION}"
+        BASE_IMAGE: "python:3.11-slim-bookworm"
+        CURL_VERSION: "${CURL_VERSION:-}"
+        DAP_VERSION: "${DAP_VERSION:-}"
+        GDAL_VERSION: "${GDAL_VERSION:-}"
+        HDF5_VERSION: "${HDF5_VERSION:-}"
+        NETCDF_VERSION: "${NETCDF_VERSION:-}"
+        NCO_VERSION: "${NCO_VERSION:-}"
+        PROJ_VERSION: "${PROJ_VERSION:-}"
+      target: python
     command: "'tail -f /dev/null'"
     entrypoint: ["/bin/bash", "-c"]
-    image: "onaci/ereefs-netcdf-base:dev"
-
+    image: "onaci/ereefs-netcdf-base:python-dev"
