@@ -5,7 +5,7 @@ services:
     build:
       context: .
       args:
-        BASE_IMAGE: "python:3.11-slim-bookworm"
+        BASE_IMAGE: "${BASE_IMAGE}"
         CURL_VERSION: "${CURL_VERSION:-}"
         DAP_VERSION: "${DAP_VERSION:-}"
         GDAL_VERSION: "${GDAL_VERSION:-}"
