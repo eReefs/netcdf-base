@@ -16,11 +16,15 @@ LABEL org.opencontainers.image.base.name=${BASE_IMAGE}
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Upgrade any packages and libraries already pre-installed by the base image
-RUN apt-get update \
+RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
+    --mount=target=/var/cache/apt,type=cache,sharing=locked \
+    apt-get update \
     && apt-get -y upgrade
 
 # Install the OS packages that are prerequisites for our source-images
-RUN apt-get update \
+RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
+    --mount=target=/var/cache/apt,type=cache,sharing=locked \
+    apt-get update \
     && apt-get install --no-install-recommends -y \
         antlr \
         autoconf \
@@ -80,7 +84,9 @@ RUN apt-get update \
 # Ensure the libraries we want to build and install from source are purged
 # (in case the base image had them installed or one of our prerequisites had
 # them as a dependency
-RUN apt-get purge -y \
+RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
+    --mount=target=/var/cache/apt,type=cache,sharing=locked \
+    apt-get purge -y \
         curl \
     && apt-get purge -y \
         libcurl4-openssl-dev \
@@ -94,9 +100,10 @@ RUN apt-get purge -y \
         nco \
     && apt-get autoremove --purge
 
-# Clean up the package cache
-RUN apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# Identify the path for the MPI library headers, defaulting to the location for an 
+# x86_64 CPU architecture if the builder has not specified anything different.
+ARG MPI_INCLUDE_PATH
+ENV MPI_INCLUDE_PATH="${MPI_INCLUDE_PATH:-/usr/lib/x86_64-linux-gnu/openmpi/include}"
 
 #------------------------------------------------------------------------------
 # Install a specific version of libcurl and curl from source
@@ -106,8 +113,13 @@ RUN apt-get clean \
 #------------------------------------------------------------------------------
 ARG CURL_VERSION
 ENV CURL_VERSION="${CURL_VERSION:-8.6.0}"
-RUN wget -O - "https://github.com/curl/curl/releases/download/curl-$(echo "${CURL_VERSION}" | tr '.' '_')/curl-${CURL_VERSION}.tar.gz"  | tar -xz -C /usr/local/src/
-RUN cd /usr/local/src/curl-${CURL_VERSION}/ \
+ENV CURL_SRC_DIR="/usr/local/src/curl-${CURL_VERSION}"
+RUN --mount=target="${CURL_SRC_DIR}",type=cache,sharing=locked \
+    if [ ! -f "${CURL_SRC_DIR}/configure" ]; then \
+        wget -O - "https://github.com/curl/curl/releases/download/curl-$(echo "${CURL_VERSION}" | tr '.' '_')/curl-${CURL_VERSION}.tar.gz"  | tar -xz -C /usr/local/src/; \
+    fi
+RUN --mount=target="${CURL_SRC_DIR}",type=cache,sharing=locked \
+    cd "${CURL_SRC_DIR}" \
     && ./configure --prefix=/usr/local --with-openssl --enable-versioned-symbols \
     && make \
     && make install \
@@ -129,8 +141,13 @@ LABEL se.curl.version=${CURL_VERSION}
 #------------------------------------------------------------------------------
 ARG DAP_VERSION
 ENV DAP_VERSION="${DAP_VERSION:-3.21.0-27}"
-RUN wget -O - "https://github.com/OPENDAP/libdap4/archive/refs/tags/${DAP_VERSION}.tar.gz"  | tar -xz -C /usr/local/src/
-RUN cd /usr/local/src/libdap4-${DAP_VERSION} \
+ENV DAP_SRC_DIR="/usr/local/src/libdap4-${DAP_VERSION}"
+RUN --mount=target="${DAP_SRC_DIR}",type=cache,sharing=locked \
+    if [ ! -f "${DAP_SRC_DIR}/configure" ]; then \
+        wget -O - "https://github.com/OPENDAP/libdap4/archive/refs/tags/${DAP_VERSION}.tar.gz"  | tar -xz -C /usr/local/src/; \
+    fi
+RUN --mount=target="${DAP_SRC_DIR}",type=cache,sharing=locked \
+    cd "${DAP_SRC_DIR}" \
     && autoreconf --force --install --verbose \
     && CPPFLAGS="-I/usr/include/tirpc" LIBS="-ltirpc" ./configure --prefix=/usr/local \
     && make \
@@ -155,8 +172,13 @@ LABEL org.opendap.dap.version=${DAP_VERSION}
 #------------------------------------------------------------------------------
 ARG HDF5_VERSION
 ENV HDF5_VERSION="${HDF5_VERSION:-1.14.0}"
-RUN wget -O - https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-$(echo "${HDF5_VERSION}" | sed -r 's/([[:digit:]]+\.[[:digit:]]+).*/\1/')/hdf5-${HDF5_VERSION}/src/hdf5-${HDF5_VERSION}.tar.bz2 | tar -xj -C /usr/local/src/
-RUN cd /usr/local/src/hdf5-${HDF5_VERSION} \
+ENV HDF5_SRC_DIR="/usr/local/src/hdf5-${HDF5_VERSION}"
+RUN --mount=target="${HDF5_SRC_DIR}",type=cache,sharing=locked \
+    if [ ! -f "${HDF5_SRC_DIR}/configure" ]; then \
+        wget -O - https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-$(echo "${HDF5_VERSION}" | sed -r 's/([[:digit:]]+\.[[:digit:]]+).*/\1/')/hdf5-${HDF5_VERSION}/src/hdf5-${HDF5_VERSION}.tar.bz2 | tar -xj -C /usr/local/src/; \
+    fi
+RUN --mount=target="${HDF5_SRC_DIR}",type=cache,sharing=locked \
+    cd "${HDF5_SRC_DIR}" \
     && ./configure --prefix=/usr/local --enable-parallel --enable-threadsafe --enable-unsupported --enable-ros3-vfd \
     && make install \
     && ldconfig
@@ -173,13 +195,18 @@ LABEL org.hdfgroup.hdf5.version=${HDF5_VERSION}
 #------------------------------------------------------------------------------
 ARG AWS_SDK_CPP_REFSPEC
 ENV AWS_SDK_CPP_REFSPEC="${AWS_SDK_CPP_REFSPEC:-main}"
-RUN mkdir /usr/local/src/aws-sdk-cpp \
-    && cd /usr/local/src/aws-sdk-cpp \
-    && git clone https://github.com/aws/aws-sdk-cpp . \
-    && git checkout "${AWS_SDK_CPP_REFSPEC}" \
-    && git submodule update --init --recursive
-RUN mkdir /usr/local/src/aws-sdk-cpp/build \
-    && cd /usr/local/src/aws-sdk-cpp/build \
+ENV AWS_SDK_CPP_SRC_DIR="/usr/local/src/aws-sdk-cpp"
+RUN --mount=target="${AWS_SDK_CPP_SRC_DIR}",type=cache,sharing=locked \
+    if [ ! -f "${AWS_SDK_CPP_SRC_DIR}/.gitmodules" ]; then \
+        mkdir -p /usr/local/src/aws-sdk-cpp \
+        && cd /usr/local/src/aws-sdk-cpp \
+        && git clone https://github.com/aws/aws-sdk-cpp . \
+        && git checkout "${AWS_SDK_CPP_REFSPEC}" \
+        && git submodule update --init --recursive; \
+    fi
+RUN --mount=target="${AWS_SDK_CPP_SRC_DIR}",type=cache,sharing=locked \
+    mkdir -p "${AWS_SDK_CPP_SRC_DIR}/build" \
+    && cd "${AWS_SDK_CPP_SRC_DIR}/build" \
     && cmake ../ \
         -DBUILD_ONLY="s3" \
         -DENABLE_UNITY_BUILD=ON \
@@ -210,9 +237,13 @@ LABEL com.amazonaws.sdk.version=${AWS_SDK_CPP_REFSPEC}
 #------------------------------------------------------------------------------
 ARG NETCDF_VERSION
 ENV NETCDF_VERSION="${NETCDF_VERSION:-4.9.2}"
-ENV MPI_INCLUDE_PATH="/usr/lib/x86_64-linux-gnu/openmpi/include"
-RUN wget -O - https://github.com/Unidata/netcdf-c/archive/refs/tags/v${NETCDF_VERSION}.tar.gz | tar -xz -C /usr/local/src/
-RUN cd /usr/local/src/netcdf-c-${NETCDF_VERSION}/ \
+ENV NETCDF_SRC_DIR="/usr/local/src/netcdf-c-${NETCDF_VERSION}"
+RUN --mount=target="${NETCDF_SRC_DIR}",type=cache,sharing=locked \
+    if [ ! -f "${NETCDF_SRC_DIR}/configure" ]; then \
+        wget -O - https://github.com/Unidata/netcdf-c/archive/refs/tags/v${NETCDF_VERSION}.tar.gz | tar -xz -C /usr/local/src/; \
+    fi
+RUN --mount=target="${NETCDF_SRC_DIR}",type=cache,sharing=locked \
+    cd "${NETCDF_SRC_DIR}" \
     && CPATH="${MPI_INCLUDE_PATH}" CC=mpicc LDFLAGS="-L/usr/local/lib -laws-cpp-sdk-s3" ./configure \
       --prefix=/usr/local \
       --enable-hdf5 \
@@ -239,8 +270,13 @@ LABEL edu.ucar.unidata.netcdf.version=${NETCDF_VERSION}
 #------------------------------------------------------------------------------
 ARG NCO_VERSION
 ENV NCO_VERSION="${NCO_VERSION:-5.1.9}"
-RUN wget -O - https://github.com/nco/nco/archive/${NCO_VERSION}.tar.gz | tar -xz -C /usr/local/src/
-RUN cd /usr/local/src/nco-${NCO_VERSION}/ \
+ENV NCO_SRC_DIR="/usr/local/src/nco-${NCO_VERSION}"
+RUN --mount=target="${NCO_SRC_DIR}",type=cache,sharing=locked \
+    if [ ! -f "${NCO_SRC_DIR}/configure" ]; then \
+        wget -O - https://github.com/nco/nco/archive/${NCO_VERSION}.tar.gz | tar -xz -C /usr/local/src/; \
+    fi
+RUN --mount=target="${NCO_SRC_DIR}",type=cache,sharing=locked \
+    cd "${NCO_SRC_DIR}" \
     && ./configure --prefix=/usr/local \
     && make install \
     && ldconfig
@@ -256,9 +292,14 @@ LABEL net.sf.nco.version=${NCO_VERSION}
 #------------------------------------------------------------------------------
 ARG PROJ_VERSION
 ENV PROJ_VERSION="${PROJ_VERSION:-9.3.1}"
-RUN wget -O - https://download.osgeo.org/proj/proj-${PROJ_VERSION}.tar.gz | tar -xz -C /usr/local/src/
-RUN mkdir -p /usr/local/src/proj-${PROJ_VERSION}/build \
-    && cd /usr/local/src/proj-${PROJ_VERSION}/build \
+ENV PROJ_SRC_DIR="/usr/local/src/proj-${PROJ_VERSION}"
+RUN --mount=target="${PROJ_SRC_DIR}",type=cache,sharing=locked \
+    if [ ! -f "${PROJ_SRC_DIR}/cmake" ]; then \
+        wget -O - https://download.osgeo.org/proj/proj-${PROJ_VERSION}.tar.gz | tar -xz -C /usr/local/src/; \
+    fi
+RUN --mount=target="${PROJ_SRC_DIR}",type=cache,sharing=locked \
+    mkdir -p "${PROJ_SRC_DIR}/build" \
+    && cd "${PROJ_SRC_DIR}/build" \
     && cmake ../ \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr/local \
@@ -279,9 +320,14 @@ LABEL org.proj.version=${PROJ_VERSION}
 #------------------------------------------------------------------------------
 ARG GDAL_VERSION
 ENV GDAL_VERSION="${GDAL_VERSION:-3.8.3}"
-RUN wget -O - https://github.com/OSGeo/gdal/releases/download/v${GDAL_VERSION}/gdal-${GDAL_VERSION}.tar.gz | tar -xz -C /usr/local/src/
-RUN mkdir -p /usr/local/src/gdal-${GDAL_VERSION}/build \
-    && cd /usr/local/src/gdal-${GDAL_VERSION}/build \
+ENV GDAL_SRC_DIR="/usr/local/src/gdal-${GDAL_VERSION}"
+RUN --mount=target="${GDAL_SRC_DIR}",type=cache,sharing=locked \
+    if [ ! -f "${GDAL_SRC_DIR}/cmake" ]; then \
+        wget -O - https://github.com/OSGeo/gdal/releases/download/v${GDAL_VERSION}/gdal-${GDAL_VERSION}.tar.gz | tar -xz -C /usr/local/src/; \
+    fi
+RUN --mount=target="${GDAL_SRC_DIR}",type=cache,sharing=locked \
+    mkdir -p "${GDAL_SRC_DIR}/build" \
+    && cd "${GDAL_SRC_DIR}/build" \
     && CC=mpicc CXX=mpic++ cmake ../ \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr/local \
@@ -317,12 +363,14 @@ LABEL org.gdal.version=${GDAL_VERSION}
 FROM default as python
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PYTHON_HELPER_DIR='/usr/local/src/python-netcdf-helper'
 
-RUN pip3 install --upgrade pip wheel setuptools
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install --upgrade pip wheel setuptools
 
-ENV PYTHON_HELPER_DIR='/usr/local/src/python-netcdf-helper'
 COPY ./python "${PYTHON_HELPER_DIR}/"
-RUN chmod 0755 "${PYTHON_HELPER_DIR}/pip3-netcdf-install.sh" && \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    chmod 0755 "${PYTHON_HELPER_DIR}/pip3-netcdf-install.sh" && \
     ln -s "${PYTHON_HELPER_DIR}/pip3-netcdf-install.sh" /usr/local/bin/pip3-netcdf-install && \
     pip3-netcdf-install
