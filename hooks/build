@@ -30,7 +30,7 @@ if [[ -n "${DOCKER_TAG}" ]] && [[ "${DOCKER_TAG}" != "latest" ]] && [[ "${DOCKER
 fi
 
 BUILD_TARGET="default"
-if [[ $BASE_IMAGE ~= python ]]; then
+if [[ $BASE_IMAGE =~ python ]]; then
     BUILD_TARGET="python"
 fi
 

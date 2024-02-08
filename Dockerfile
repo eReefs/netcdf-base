@@ -230,7 +230,6 @@ LABEL edu.ucar.unidata.netcdf.version=${NETCDF_VERSION}
 ARG NCO_VERSION
 ENV NCO_VERSION="${NCO_VERSION:-5.1.9}"
 RUN wget -O - https://github.com/nco/nco/archive/${NCO_VERSION}.tar.gz | tar -xz -C /usr/local/src/
-RUN find /usr -name '*netcdf*'
 RUN cd /usr/local/src/nco-${NCO_VERSION}/ \
     && ./configure --prefix=/usr/local \
     && make install \
