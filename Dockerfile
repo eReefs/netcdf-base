@@ -5,7 +5,7 @@
 # This must be derived from an apt-compatible OS Image (e.g. debian, ubuntu etc)
 
 ARG BASE_IMAGE="debian:12-slim"
-FROM ${BASE_IMAGE}
+FROM ${BASE_IMAGE} as default
 
 # Record the actual base image used from the FROM command as a label.
 ARG BASE_IMAGE
@@ -51,6 +51,7 @@ RUN apt-get update \
         liblz4-dev \
         libopenmpi-dev \
         libpng-dev \
+        libpsl-dev \
         libpulse-dev \
         libsasl2-dev \
         libsqlite3-dev \
@@ -101,10 +102,10 @@ RUN apt-get clean \
 # Install a specific version of libcurl and curl from source
 # Instructions: https://curl.se/docs/install.html
 # Versions: https://github.com/curl/curl/releases
-# prerequisites: libssl-dev
+# prerequisites: libssl-dev, libpsl-dev
 #------------------------------------------------------------------------------
 ARG CURL_VERSION
-ENV CURL_VERSION="${CURL_VERSION:-8.2.1}"
+ENV CURL_VERSION="${CURL_VERSION:-8.6.0}"
 RUN wget -O - "https://github.com/curl/curl/releases/download/curl-$(echo "${CURL_VERSION}" | tr '.' '_')/curl-${CURL_VERSION}.tar.gz"  | tar -xz -C /usr/local/src/
 RUN cd /usr/local/src/curl-${CURL_VERSION}/ \
     && ./configure --prefix=/usr/local --with-openssl --enable-versioned-symbols \
@@ -127,7 +128,7 @@ LABEL se.curl.version=${CURL_VERSION}
 #       no longer in glibc from Debian 12 onwards.
 #------------------------------------------------------------------------------
 ARG DAP_VERSION
-ENV DAP_VERSION="${DAP_VERSION:-3.20.11}"
+ENV DAP_VERSION="${DAP_VERSION:-3.21.0-27}"
 RUN wget -O - "https://github.com/OPENDAP/libdap4/archive/refs/tags/${DAP_VERSION}.tar.gz"  | tar -xz -C /usr/local/src/
 RUN cd /usr/local/src/libdap4-${DAP_VERSION} \
     && autoreconf --force --install --verbose \
@@ -209,9 +210,10 @@ LABEL com.amazonaws.sdk.version=${AWS_SDK_CPP_REFSPEC}
 #------------------------------------------------------------------------------
 ARG NETCDF_VERSION
 ENV NETCDF_VERSION="${NETCDF_VERSION:-4.9.2}"
+ENV MPI_INCLUDE_PATH="/usr/lib/x86_64-linux-gnu/openmpi/include"
 RUN wget -O - https://github.com/Unidata/netcdf-c/archive/refs/tags/v${NETCDF_VERSION}.tar.gz | tar -xz -C /usr/local/src/
 RUN cd /usr/local/src/netcdf-c-${NETCDF_VERSION}/ \
-    && CPATH=/usr/lib/x86_64-linux-gnu/openmpi/include ./configure \
+    && CPATH="${MPI_INCLUDE_PATH}" CC=mpicc LDFLAGS="-L/usr/local/lib -laws-cpp-sdk-s3" ./configure \
       --prefix=/usr/local \
     && make install \
     && ldconfig
@@ -226,7 +228,7 @@ LABEL edu.ucar.unidata.netcdf.version=${NETCDF_VERSION}
 # Prerequisites: ANTLR, GSL, netCDF, OPeNDAP, UDUnits
 #------------------------------------------------------------------------------
 ARG NCO_VERSION
-ENV NCO_VERSION="${NCO_VERSION:-5.1.7}"
+ENV NCO_VERSION="${NCO_VERSION:-5.1.9}"
 RUN wget -O - https://github.com/nco/nco/archive/${NCO_VERSION}.tar.gz | tar -xz -C /usr/local/src/
 RUN find /usr -name '*netcdf*'
 RUN cd /usr/local/src/nco-${NCO_VERSION}/ \
@@ -244,7 +246,7 @@ LABEL net.sf.nco.version=${NCO_VERSION}
 # Prerequisites: cmake, libsqlite3-dev, libtiff-dev
 #------------------------------------------------------------------------------
 ARG PROJ_VERSION
-ENV PROJ_VERSION="${PROJ_VERSION:-9.2.1}"
+ENV PROJ_VERSION="${PROJ_VERSION:-9.3.1}"
 RUN wget -O - https://download.osgeo.org/proj/proj-${PROJ_VERSION}.tar.gz | tar -xz -C /usr/local/src/
 RUN mkdir -p /usr/local/src/proj-${PROJ_VERSION}/build \
     && cd /usr/local/src/proj-${PROJ_VERSION}/build \
@@ -267,14 +269,14 @@ LABEL org.proj.version=${PROJ_VERSION}
 
 #------------------------------------------------------------------------------
 ARG GDAL_VERSION
-ENV GDAL_VERSION="${GDAL_VERSION:-3.7.2}"
+ENV GDAL_VERSION="${GDAL_VERSION:-3.8.3}"
 RUN wget -O - https://github.com/OSGeo/gdal/releases/download/v${GDAL_VERSION}/gdal-${GDAL_VERSION}.tar.gz | tar -xz -C /usr/local/src/
 RUN mkdir -p /usr/local/src/gdal-${GDAL_VERSION}/build \
     && cd /usr/local/src/gdal-${GDAL_VERSION}/build \
     && CC=mpicc CXX=mpic++ cmake ../ \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr/local \
-        -DMPI_INCLUDE_PATH=/usr/lib/x86_64-linux-gnu/openmpi/include \
+        -DMPI_INCLUDE_PATH="${MPI_INCLUDE_PATH}" \
         -DGDAL_SET_INSTALL_RELATIVE_RPATH=ON \
         -DGDAL_USE_BLOSC=ON \
         -DGDAL_USE_CURL=ON \
@@ -297,3 +299,21 @@ RUN mkdir -p /usr/local/src/gdal-${GDAL_VERSION}/build \
     && cmake --build . \
     && cmake --build . --target install
 LABEL org.gdal.version=${GDAL_VERSION}
+
+#------------------------------------------------------------------------------
+# CSIRO eReefs NetCDF Python Base
+# This extension handles installing some common python libraries which
+# depend on the NetCDF-related C libraries installed by the default target
+#------------------------------------------------------------------------------
+FROM default as python
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN pip3 install --upgrade pip wheel setuptools
+
+ENV PYTHON_HELPER_DIR='/usr/local/src/python-netcdf-helper'
+COPY ./python "${PYTHON_HELPER_DIR}/"
+RUN chmod 0755 "${PYTHON_HELPER_DIR}/pip3-netcdf-install.sh" && \
+    ln -s "${PYTHON_HELPER_DIR}/pip3-netcdf-install.sh" /usr/local/bin/pip3-netcdf-install && \
+    pip3-netcdf-install

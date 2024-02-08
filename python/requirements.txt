@@ -1,0 +1,10 @@
+Cython==3.0.8
+gdal==3.8.3
+mpi4py==3.1.5
+nco==1.1.0
+netcdf4==1.6.5
+numpy==1.26.4
+pydap==3.4.1
+pyproj==3.6.1
+shapely==2.0.2
+vincenty==0.1.4 

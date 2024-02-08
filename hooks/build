@@ -1,7 +1,9 @@
 #!/bin/bash
 
 # Source environment variables for this repository branch
-source .env
+if [ -f .env ]; then
+    source .env
+fi
 
 # Derive some more variables from the dockerhub build environment
 BUILD_TIMESTAMP="$(date --rfc-3339=seconds)"
@@ -27,8 +29,14 @@ if [[ -n "${DOCKER_TAG}" ]] && [[ "${DOCKER_TAG}" != "latest" ]] && [[ "${DOCKER
     fi
 fi
 
+BUILD_TARGET="default"
+if [[ $BASE_IMAGE ~= python ]]; then
+    BUILD_TARGET="python"
+fi
+
 # Build our customised docker image
 docker build --pull \
+    --target "${BUILD_TARGET}" \
     --build-arg "BASE_IMAGE=${BASE_IMAGE}" \
     --build-arg "CURL_VERSION=${CURL_VERSION}" \
     --build-arg "DAP_VERSION=${DAP_VERSION}" \
