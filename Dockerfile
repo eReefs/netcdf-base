@@ -46,7 +46,7 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
         libantlr-dev \
         libexpat1-dev \
         libfl-dev \
-        libgeotiff-dev \
+        libfreexl-dev \
         libgif-dev \
         libgsl-dev \
         libjpeg62-turbo-dev \
@@ -59,7 +59,6 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
         libpulse-dev \
         libsasl2-dev \
         libsqlite3-dev \
-        libspatialite-dev \
         libssl-dev \
         libtiff-dev \
         libtirpc3 \
@@ -284,7 +283,8 @@ LABEL net.sf.nco.version=${NCO_VERSION}
 
 #------------------------------------------------------------------------------
 # Install a specific version of proj from source, ensuring it links with our
-# selected version of libcurl and curl.  proj is a prerequisite for GDAL.
+# selected version of libcurl and curl. 
+# libproj is a prerequisite for libgeotiff-dev and GDAL.
 #
 # Instructions: https://proj.org/en/stable/install.html#compilation-and-installation-from-source-code
 # Versions: https://proj.org/en/stable/download.html#current-release
@@ -308,15 +308,68 @@ RUN --mount=target="${PROJ_SRC_DIR}",type=cache,sharing=locked \
 LABEL org.proj.version=${PROJ_VERSION}
 
 #------------------------------------------------------------------------------
+# Install a specific version of geos from source, since GEOS is a prerequisite
+# for GDAL, which is picky about version compatibility. (Also, the default
+# version on most operating system base images is fairly out of date)
+#
+# Instructions and versions: https://libgeos.org/usage/download/
+#------------------------------------------------------------------------------
+ARG GEOS_VERSION
+ENV GEOS_VERSION="${GEOS_VERSION:-3.12.1}"
+ENV GEOS_SRC_DIR="/usr/local/src/geos-${GEOS_VERSION}"
+RUN --mount=target="${GEOS_SRC_DIR}",type=cache,sharing=locked \
+    if [ ! -f "${GEOS_SRC_DIR}/cmake" ]; then \
+        wget -O - "https://download.osgeo.org/geos/geos-${GEOS_VERSION}.tar.bz2" | bunzip2 | tar x -C /usr/local/src; \
+    fi
+RUN --mount=target="${GEOS_SRC_DIR}",type=cache,sharing=locked \
+    mkdir -p "${GEOS_SRC_DIR}/build" \
+    && cd "${GEOS_SRC_DIR}/build" \
+    && cmake ../ \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+    && make \
+    && make install
+LABEL org.geos.version=${GEOS_VERSION}
+
+#------------------------------------------------------------------------------
+# Install a specific version of libgeotiff from source, ensuring it links 
+# with our selected version of proj.  libgeotiff is a prerequisite for GDAL.
+#
+# Instructions: https://trac.osgeo.org/geotiff/ticket/17
+# Versions: https://github.com/OSGeo/libgeotiff/releases
+# Prerequisites: proj, libsqlite3-dev, libtiff-dev
+#------------------------------------------------------------------------------
+ARG GEOTIFF_VERSION
+ENV GEOTIFF_VERSION="${GEOTIFF_VERSION:-1.7.1}"
+ENV GEOTIFF_SRC_DIR="/usr/local/src/libgeotiff-${GEOTIFF_VERSION}"
+RUN --mount=target="${GEOTIFF_SRC_DIR}",type=cache,sharing=locked \
+    if [ ! -f "${GEOTIFF_SRC_DIR}/cmake" ]; then \
+        wget -O - "https://github.com/OSGeo/libgeotiff/releases/download/${GEOTIFF_VERSION}/libgeotiff-${GEOTIFF_VERSION}.tar.gz" | tar -xz -C /usr/local/src/; \
+    fi
+RUN --mount=target="${GEOTIFF_SRC_DIR}",type=cache,sharing=locked \
+    mkdir -p "${GEOTIFF_SRC_DIR}/build" \
+    && cd "${GEOTIFF_SRC_DIR}/build" \
+    && cmake ../ \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        -DWITH_JPEG=ON \
+        -DWITH_ZLIB=ON \
+    && cmake --build . \
+    && cmake --build . --target install
+LABEL org.libgeotiff.version=${GEOTIFF_VERSION}
+
+#------------------------------------------------------------------------------
 # Install a specific version of GDAL from source, ensuring it links with our
-# selected versions of libhdf5, libnetcdf and libproj
+# selected versions of libhdf5, libnetcdf, libproj and libgeos
 #
 # Instructions: https://gdal.org/development/building_from_source.html
 # Versions: https://gdal.org/download.html
-# Prerequisites: libcurl, libhdf5, libnetcdf, libproj, libsqlite3 and libsqlite3-dev
+# Prerequisites: libcurl, libgeos, libhdf5, libnetcdf, libproj, libsqlite3 and libsqlite3-dev
 #
 # NOTE1: Blosc is an additional prerequisite for the zarr driver
-
+# NOTE2: If we want to add spatialite support, we need to build librttopo
+#        and libspatialite from source due to proj and geos dependencies.
+#        As none of our downstream apps need it yet, skip that for now.
 #------------------------------------------------------------------------------
 ARG GDAL_VERSION
 ENV GDAL_VERSION="${GDAL_VERSION:-3.8.3}"
@@ -347,7 +400,7 @@ RUN --mount=target="${GDAL_SRC_DIR}",type=cache,sharing=locked \
         -DGDAL_USE_NETCDF=ON \
         -DGDAL_USE_OPENSSL=ON \
         -DGDAL_USE_PNG=ON \
-        -DGDAL_USE_SPATIALITE=ON \
+        -DGDAL_USE_SPATIALITE=OFF \
         -DGDAL_USE_SQLITE3=ON \
         -DGDAL_USE_TIFF=ON \
         -DGDAL_USE_ZLIB=ON \
