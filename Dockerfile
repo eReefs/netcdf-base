@@ -237,12 +237,14 @@ LABEL com.amazonaws.sdk.version=${AWS_SDK_CPP_REFSPEC}
 ARG NETCDF_VERSION
 ENV NETCDF_VERSION="${NETCDF_VERSION:-4.9.2}"
 ENV NETCDF_SRC_DIR="/usr/local/src/netcdf-c-${NETCDF_VERSION}"
+COPY ./patches/netcdf-c /tmp/netcdf-c/patches
 RUN --mount=target="${NETCDF_SRC_DIR}",type=cache,sharing=locked \
     if [ ! -f "${NETCDF_SRC_DIR}/configure" ]; then \
         wget -O - https://github.com/Unidata/netcdf-c/archive/refs/tags/v${NETCDF_VERSION}.tar.gz | tar -xz -C /usr/local/src/; \
     fi
 RUN --mount=target="${NETCDF_SRC_DIR}",type=cache,sharing=locked \
     cd "${NETCDF_SRC_DIR}" \
+    && patch -p1 < /tmp/netcdf-c/patches/0001-Fix-issue-2674.patch \
     && CPATH="${MPI_INCLUDE_PATH}" CC=mpicc LDFLAGS="-L/usr/local/lib -laws-cpp-sdk-s3" ./configure \
       --prefix=/usr/local \
       --enable-hdf5 \
