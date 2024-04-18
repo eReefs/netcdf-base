@@ -238,8 +238,11 @@ ARG NETCDF_VERSION
 ENV NETCDF_VERSION="${NETCDF_VERSION:-4.9.2}"
 ENV NETCDF_SRC_DIR="/usr/local/src/netcdf-c-${NETCDF_VERSION}"
 RUN --mount=target="${NETCDF_SRC_DIR}",type=cache,sharing=locked \
+    --mount=target="${NETCDF_SRC_DIR}/patches",type=bind,source=./patches/netcdf-c \
     if [ ! -f "${NETCDF_SRC_DIR}/configure" ]; then \
         wget -O - https://github.com/Unidata/netcdf-c/archive/refs/tags/v${NETCDF_VERSION}.tar.gz | tar -xz -C /usr/local/src/; \
+        cd "${NETCDF_SRC_DIR}" ; \
+        patch -p1 < "./patches/0001-Fix-issue-2674.patch" ; \
     fi
 RUN --mount=target="${NETCDF_SRC_DIR}",type=cache,sharing=locked \
     cd "${NETCDF_SRC_DIR}" \
