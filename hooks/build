@@ -6,12 +6,12 @@ if [ -f .env ]; then
 fi
 
 # Derive some more variables from the dockerhub build environment
+BUILD_TARGET="python"
 BUILD_TIMESTAMP="$(date --rfc-3339=seconds)"
 DOCKER_TAG="${DOCKER_TAG:-}"
 SAFE_TIMESTAMP="$(echo $BUILD_TIMESTAMP | sed 's/ /T/g' | sed 's/:/-/g' | sed 's/\+.*//')"
 SOURCE_URL="$(git remote get-url origin || true)"
 VERSION_TAG="${SOURCE_BRANCH}_v${SAFE_TIMESTAMP}-${SOURCE_COMMIT}"
-
 
 # Treat most DOCKER_TAG values as overrides for the
 # BASE_IMAGE variable sourced from the .env file
@@ -22,16 +22,13 @@ if [[ -n "${DOCKER_TAG}" ]] && [[ "${DOCKER_TAG}" != "latest" ]] && [[ "${DOCKER
     # Derive the BASE_IMAGE from the DOCKER_TAG
     if [[ $DOCKER_TAG =~ ^r-base- ]]; then
         BASE_IMAGE=$(echo "${DOCKER_TAG}" | sed 's/^r-base-/r-base:/')
+        BUILD_TARGET="gdal"
     elif [[ $DOCKER_TAG =~ ^rocker-r- ]]; then
         BASE_IMAGE=$(echo "${DOCKER_TAG}" | sed 's/\-/:/3' | sed 's|\-|/|1')
+        BUILD_TARGET="gdal"
     else
         BASE_IMAGE=$(echo "${DOCKER_TAG}" | sed 's/\-/:/1')
     fi
-fi
-
-BUILD_TARGET="default"
-if [[ $BASE_IMAGE =~ python ]]; then
-    BUILD_TARGET="python"
 fi
 
 # Build our customised docker image
