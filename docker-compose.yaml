@@ -11,6 +11,7 @@ services:
         GDAL_VERSION: "${GDAL_VERSION:-}"
         HDF5_VERSION: "${HDF5_VERSION:-}"
         NETCDF_VERSION: "${NETCDF_VERSION:-}"
+        NETCDF_PATCH: "${NETCDF_PATCH:-}"
         NCO_VERSION: "${NCO_VERSION:-}"
         PROJ_VERSION: "${PROJ_VERSION:-}"
       target: python
