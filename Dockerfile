@@ -3,9 +3,8 @@
 #------------------------------------------------------------------------------
 # Allow the base-image to be selected at build time.
 # This must be derived from an apt-compatible OS Image (e.g. debian, ubuntu etc)
-
 ARG BASE_IMAGE="debian:12-slim"
-FROM ${BASE_IMAGE} as default
+FROM ${BASE_IMAGE} as base
 
 # Record the actual base image used from the FROM command as a label.
 ARG BASE_IMAGE
@@ -99,10 +98,15 @@ RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
         nco \
     && apt-get autoremove --purge
 
-# Identify the path for the MPI library headers, defaulting to the location for an 
+# Identify the path for the MPI library headers, defaulting to the location for an
 # x86_64 CPU architecture if the builder has not specified anything different.
 ARG MPI_INCLUDE_PATH
 ENV MPI_INCLUDE_PATH="${MPI_INCLUDE_PATH:-/usr/lib/x86_64-linux-gnu/openmpi/include}"
+
+# Define an ARG for a path to a package-cache which we can use
+# to avoid re-downloading large/slow tarballs during repeated builds
+# this will hopefully speed up development
+ARG DOWNLOADS_DIR="/usr/local/src/downloads"
 
 #------------------------------------------------------------------------------
 # Install a specific version of libcurl and curl from source
@@ -110,19 +114,27 @@ ENV MPI_INCLUDE_PATH="${MPI_INCLUDE_PATH:-/usr/lib/x86_64-linux-gnu/openmpi/incl
 # Versions: https://github.com/curl/curl/releases
 # prerequisites: libssl-dev, libpsl-dev
 #------------------------------------------------------------------------------
+FROM base as curl
+
 ARG CURL_VERSION
 ENV CURL_VERSION="${CURL_VERSION:-8.6.0}"
 ENV CURL_SRC_DIR="/usr/local/src/curl-${CURL_VERSION}"
-RUN --mount=target="${CURL_SRC_DIR}",type=cache,sharing=locked \
-    if [ ! -f "${CURL_SRC_DIR}/configure" ]; then \
-        wget -O - "https://github.com/curl/curl/releases/download/curl-$(echo "${CURL_VERSION}" | tr '.' '_')/curl-${CURL_VERSION}.tar.gz"  | tar -xz -C /usr/local/src/; \
-    fi
-RUN --mount=target="${CURL_SRC_DIR}",type=cache,sharing=locked \
-    cd "${CURL_SRC_DIR}" \
+
+RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
+    CURL_PATH_VERSION=$(echo "${CURL_VERSION}" | tr '.' '_'); \
+    cd "${DOWNLOADS_DIR}" \
+    && wget --timestamping \
+        "https://github.com/curl/curl/releases/download/curl-${CURL_PATH_VERSION}/curl-${CURL_VERSION}.tar.gz"
+
+RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked,readonly \
+    tar -xzf "${DOWNLOADS_DIR}/curl-${CURL_VERSION}.tar.gz" -C /usr/local/src/
+
+RUN cd "${CURL_SRC_DIR}" \
     && ./configure --prefix=/usr/local --with-openssl --enable-versioned-symbols \
     && make \
     && make install \
     && ldconfig
+
 LABEL se.curl.version=${CURL_VERSION}
 
 #------------------------------------------------------------------------------
@@ -138,20 +150,27 @@ LABEL se.curl.version=${CURL_VERSION}
 #       for the XDR functions in libtirpc instead of glibc, since they are
 #       no longer in glibc from Debian 12 onwards.
 #------------------------------------------------------------------------------
+FROM curl as dap
+
 ARG DAP_VERSION
 ENV DAP_VERSION="${DAP_VERSION:-3.21.0-27}"
 ENV DAP_SRC_DIR="/usr/local/src/libdap4-${DAP_VERSION}"
-RUN --mount=target="${DAP_SRC_DIR}",type=cache,sharing=locked \
-    if [ ! -f "${DAP_SRC_DIR}/configure" ]; then \
-        wget -O - "https://github.com/OPENDAP/libdap4/archive/refs/tags/${DAP_VERSION}.tar.gz"  | tar -xz -C /usr/local/src/; \
-    fi
-RUN --mount=target="${DAP_SRC_DIR}",type=cache,sharing=locked \
-    cd "${DAP_SRC_DIR}" \
+
+RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
+    cd "${DOWNLOADS_DIR}" \
+    && wget --timestamping -O "libdap-${DAP_VERSION}.tar.gz" \
+        "https://github.com/OPENDAP/libdap4/archive/refs/tags/${DAP_VERSION}.tar.gz"
+
+RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked,readonly \
+    tar -xzf "${DOWNLOADS_DIR}/libdap-${DAP_VERSION}.tar.gz" -C /usr/local/src/
+
+RUN cd "${DAP_SRC_DIR}" \
     && autoreconf --force --install --verbose \
     && CPPFLAGS="-I/usr/include/tirpc" LIBS="-ltirpc" ./configure --prefix=/usr/local \
     && make \
     && make install \
     && ldconfig
+
 LABEL org.opendap.dap.version=${DAP_VERSION}
 
 #------------------------------------------------------------------------------
@@ -169,18 +188,31 @@ LABEL org.opendap.dap.version=${DAP_VERSION}
 #       NetCDF files on AWS S3 Storage.
 #       S3-support in the NetCDF-C library.
 #------------------------------------------------------------------------------
+FROM dap as hdf5
+
 ARG HDF5_VERSION
 ENV HDF5_VERSION="${HDF5_VERSION:-1.14.0}"
 ENV HDF5_SRC_DIR="/usr/local/src/hdf5-${HDF5_VERSION}"
-RUN --mount=target="${HDF5_SRC_DIR}",type=cache,sharing=locked \
-    if [ ! -f "${HDF5_SRC_DIR}/configure" ]; then \
-        wget -O - https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-$(echo "${HDF5_VERSION}" | sed -r 's/([[:digit:]]+\.[[:digit:]]+).*/\1/')/hdf5-${HDF5_VERSION}/src/hdf5-${HDF5_VERSION}.tar.bz2 | tar -xj -C /usr/local/src/; \
-    fi
-RUN --mount=target="${HDF5_SRC_DIR}",type=cache,sharing=locked \
-    cd "${HDF5_SRC_DIR}" \
-    && ./configure --prefix=/usr/local --enable-parallel --enable-threadsafe --enable-unsupported --enable-ros3-vfd \
+
+RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
+    HDF_PATH_VERSION=$(echo "${HDF5_VERSION}" | sed -r 's/([[:digit:]]+\.[[:digit:]]+).*/\1/'); \
+    cd "${DOWNLOADS_DIR}" \
+    && wget --timestamping \
+        "https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-${HDF_PATH_VERSION}/hdf5-${HDF5_VERSION}/src/hdf5-${HDF5_VERSION}.tar.bz2"
+
+RUN  --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked,readonly \
+    tar -xjf "${DOWNLOADS_DIR}/hdf5-${HDF5_VERSION}.tar.bz2" -C /usr/local/src/
+
+RUN cd "${HDF5_SRC_DIR}" \
+    && CPATH="${MPI_INCLUDE_PATH}" CC=mpicc ./configure \
+        --enable-parallel \
+        --enable-threadsafe \
+        --enable-unsupported \
+        --enable-ros3-vfd \
+        --prefix=/usr/local \
     && make install \
     && ldconfig
+
 LABEL org.hdfgroup.hdf5.version=${HDF5_VERSION}
 
 #------------------------------------------------------------------------------
@@ -189,23 +221,36 @@ LABEL org.hdfgroup.hdf5.version=${HDF5_VERSION}
 # Instructions: https://github.com/Unidata/netcdf-c/blob/main/docs/cloud.md
 # Prerequisites: libcurl, libopenssl, libuuid, zlib, libpulse
 #
-# Note: This SDK is a prerequisite for the NetCDF-C library to enable NCZarr
-#       access to Zarr-formatted datasets on S3.
+# Note1: This SDK is a prerequisite for the NetCDF-C library to enable NCZarr
+#        access to Zarr-formatted datasets on S3.
+# Note2: We *could* just use the ADD instruction to add the SDK codebase to the
+#        image: it works (and automatically fetches submodules) fine... BUT:
+#        the main branch of that repo updates several times per day with tweaks
+#        we usually don't care about, which invalidates all following build
+#        cache. We Work around this by cloning the refspec in a RUN command: it
+#        should be an identical result if you care enough to set the build arg
+#        (AWS_SDK_CPP_REFSPEC) to ask for a specific version, and good
+#        enough if you're OK with the default (main branch) refspec.
 #------------------------------------------------------------------------------
-ARG AWS_SDK_CPP_REFSPEC
-ENV AWS_SDK_CPP_REFSPEC="${AWS_SDK_CPP_REFSPEC:-main}"
-ENV AWS_SDK_CPP_SRC_DIR="/usr/local/src/aws-sdk-cpp"
-RUN --mount=target="${AWS_SDK_CPP_SRC_DIR}",type=cache,sharing=locked \
-    if [ ! -f "${AWS_SDK_CPP_SRC_DIR}/.gitmodules" ]; then \
-        mkdir -p /usr/local/src/aws-sdk-cpp \
-        && cd /usr/local/src/aws-sdk-cpp \
-        && git clone https://github.com/aws/aws-sdk-cpp . \
-        && git checkout "${AWS_SDK_CPP_REFSPEC}" \
-        && git submodule update --init --recursive; \
-    fi
-RUN --mount=target="${AWS_SDK_CPP_SRC_DIR}",type=cache,sharing=locked \
-    mkdir -p "${AWS_SDK_CPP_SRC_DIR}/build" \
-    && cd "${AWS_SDK_CPP_SRC_DIR}/build" \
+FROM hdf5 as s3
+
+ARG AWS_SDK_CPP_REFSPEC="main"
+ENV AWS_SDK_CPP_REFSPEC="${AWS_SDK_CPP_REFSPEC:-main}" \
+    AWS_SDK_CPP_SRC_DIR="/usr/local/src/aws-sdk-cpp"
+
+RUN mkdir -p /usr/local/src/aws-sdk-cpp \
+    && cd /usr/local/src/aws-sdk-cpp \
+    && git clone \
+        --branch "${AWS_SDK_CPP_REFSPEC}" \
+        --depth 1 \
+        --recurse-submodules \
+        --shallow-submodules \
+        https://github.com/aws/aws-sdk-cpp \
+        .
+
+RUN cd "${AWS_SDK_CPP_SRC_DIR}" \
+    && mkdir -p ./build \
+    && cd ./build \
     && cmake ../ \
         -DBUILD_ONLY="s3" \
         -DENABLE_UNITY_BUILD=ON \
@@ -218,6 +263,7 @@ RUN --mount=target="${AWS_SDK_CPP_SRC_DIR}",type=cache,sharing=locked \
         -DSIMPLE_INSTALL=ON \
     && cmake --build . --config Release \
     && cmake --install . --config Release
+
 LABEL com.amazonaws.sdk.version=${AWS_SDK_CPP_REFSPEC}
 
 #------------------------------------------------------------------------------
@@ -233,33 +279,45 @@ LABEL com.amazonaws.sdk.version=${AWS_SDK_CPP_REFSPEC}
 #        that location the way it discovers it *needs* the openmpi headers.
 # NOTE3: LDFLAGS is used to make this build link with the AWS-SDK-CPP S3
 #        library compiled above in response to use of the --enable-s3 flag.
+# NOTE4: the patch is for https://github.com/Unidata/netcdf-c/issues/2674.
+#        If your NetCDF version does not patch cleanly, set the NETCDF_PATCH
+#        build arg to "NO" to skip the patch attempt.
 #------------------------------------------------------------------------------
+FROM s3 as netcdf
+
 ARG NETCDF_VERSION
 ENV NETCDF_VERSION="${NETCDF_VERSION:-4.9.2}"
 ENV NETCDF_SRC_DIR="/usr/local/src/netcdf-c-${NETCDF_VERSION}"
-RUN --mount=target="${NETCDF_SRC_DIR}",type=cache,sharing=locked \
-    --mount=target="${NETCDF_SRC_DIR}/patches",type=bind,source=./patches/netcdf-c \
-    if [ ! -f "${NETCDF_SRC_DIR}/configure" ]; then \
-        wget -O - https://github.com/Unidata/netcdf-c/archive/refs/tags/v${NETCDF_VERSION}.tar.gz | tar -xz -C /usr/local/src/; \
-        cd "${NETCDF_SRC_DIR}" ; \
-        patch -p1 < "./patches/0001-Fix-issue-2674.patch" ; \
+
+RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
+    cd "${DOWNLOADS_DIR}" \
+    && wget --timestamping -O "netcdf-c-${NETCDF_VERSION}.tar.gz" \
+        "https://github.com/Unidata/netcdf-c/archive/refs/tags/v${NETCDF_VERSION}.tar.gz"
+
+RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked,readonly \
+    tar -xzf "${DOWNLOADS_DIR}/netcdf-c-${NETCDF_VERSION}.tar.gz" -C /usr/local/src/
+
+ARG NETCDF_PATCH="YES"
+COPY ./patches/netcdf-c "${NETCDF_SRC_DIR}/patches"
+RUN if [[ "${NETCDF_PATCH}" == "YES" ]]; then \
+        cd "${NETCDF_SRC_DIR}" \
+        && patch -p1 --forward < ./patches/0001-Fix-issue-2674.patch; \
+    else \
+        rm -r "${NETCDF_SRC_DIR}/patches"; \
     fi
-RUN --mount=target="${NETCDF_SRC_DIR}",type=cache,sharing=locked \
-    cd "${NETCDF_SRC_DIR}" \
-    && CPATH="${MPI_INCLUDE_PATH}" CC=mpicc LDFLAGS="-L/usr/local/lib -laws-cpp-sdk-s3" ./configure \
-      --prefix=/usr/local \
-      --enable-hdf5 \
-      --enable-dap \
-      --enable-nczarr \
-      --enable-plugins \
-      --enable-remote-functionality \
-      --enable-s3 \
-      --enable-utilities \
+
+ARG NETCDF_CONFIG_ARGS="--enable-hdf5 --enable-dap --enable-nczarr --enable-plugins --enable-remote-functionality --enable-s3 --enable-utilities" \
+    NETCDF_LDFLAGS="-laws-cpp-sdk-s3"
+RUN cd "${NETCDF_SRC_DIR}" \
+    && CPATH="${MPI_INCLUDE_PATH}" CC=mpicc LDFLAGS="-L/usr/local/lib ${NETCDF_LDFLAGS}" ./configure \
       --disable-external-server-tests \
       --disable-dap-remote-tests \
       --disable-large-file-tests \
+      ${NETCDF_CONFIG_ARGS} \
+      --prefix=/usr/local \
     && make install \
     && ldconfig
+
 LABEL edu.ucar.unidata.netcdf.version=${NETCDF_VERSION}
 
 #------------------------------------------------------------------------------
@@ -270,44 +328,58 @@ LABEL edu.ucar.unidata.netcdf.version=${NETCDF_VERSION}
 # Versions: https://github.com/nco/nco/releases
 # Prerequisites: ANTLR, GSL, netCDF, OPeNDAP, UDUnits
 #------------------------------------------------------------------------------
+FROM netcdf as nco
+
 ARG NCO_VERSION
 ENV NCO_VERSION="${NCO_VERSION:-5.1.9}"
 ENV NCO_SRC_DIR="/usr/local/src/nco-${NCO_VERSION}"
-RUN --mount=target="${NCO_SRC_DIR}",type=cache,sharing=locked \
-    if [ ! -f "${NCO_SRC_DIR}/configure" ]; then \
-        wget -O - https://github.com/nco/nco/archive/${NCO_VERSION}.tar.gz | tar -xz -C /usr/local/src/; \
-    fi
-RUN --mount=target="${NCO_SRC_DIR}",type=cache,sharing=locked \
-    cd "${NCO_SRC_DIR}" \
+
+RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
+    cd "${DOWNLOADS_DIR}" \
+    && wget --timestamping -O "nco-${NCO_VERSION}.tar.gz" \
+        "https://github.com/nco/nco/archive/${NCO_VERSION}.tar.gz"
+
+RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked,readonly \
+    tar -xzf "${DOWNLOADS_DIR}/nco-${NCO_VERSION}.tar.gz" -C /usr/local/src/
+
+RUN cd "${NCO_SRC_DIR}" \
     && ./configure --prefix=/usr/local \
     && make install \
     && ldconfig
+
 LABEL net.sf.nco.version=${NCO_VERSION}
 
 #------------------------------------------------------------------------------
 # Install a specific version of proj from source, ensuring it links with our
-# selected version of libcurl and curl. 
+# selected version of libcurl and curl.
 # libproj is a prerequisite for libgeotiff-dev and GDAL.
 #
 # Instructions: https://proj.org/en/stable/install.html#compilation-and-installation-from-source-code
 # Versions: https://proj.org/en/stable/download.html#current-release
 # Prerequisites: cmake, libsqlite3-dev, libtiff-dev
 #------------------------------------------------------------------------------
+FROM nco as proj
+
 ARG PROJ_VERSION
 ENV PROJ_VERSION="${PROJ_VERSION:-9.3.1}"
 ENV PROJ_SRC_DIR="/usr/local/src/proj-${PROJ_VERSION}"
-RUN --mount=target="${PROJ_SRC_DIR}",type=cache,sharing=locked \
-    if [ ! -f "${PROJ_SRC_DIR}/cmake" ]; then \
-        wget -O - https://download.osgeo.org/proj/proj-${PROJ_VERSION}.tar.gz | tar -xz -C /usr/local/src/; \
-    fi
-RUN --mount=target="${PROJ_SRC_DIR}",type=cache,sharing=locked \
-    mkdir -p "${PROJ_SRC_DIR}/build" \
+
+RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
+    cd "${DOWNLOADS_DIR}" \
+    && wget --timestamping \
+        "https://download.osgeo.org/proj/proj-${PROJ_VERSION}.tar.gz"
+
+RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked,readonly \
+    tar -xzf "${DOWNLOADS_DIR}/proj-${PROJ_VERSION}.tar.gz" -C /usr/local/src/
+
+RUN mkdir -p "${PROJ_SRC_DIR}/build" \
     && cd "${PROJ_SRC_DIR}/build" \
     && cmake ../ \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr/local \
     && cmake --build . \
     && cmake --build . --target install
+
 LABEL org.proj.version=${PROJ_VERSION}
 
 #------------------------------------------------------------------------------
@@ -317,40 +389,53 @@ LABEL org.proj.version=${PROJ_VERSION}
 #
 # Instructions and versions: https://libgeos.org/usage/download/
 #------------------------------------------------------------------------------
+FROM proj as geos
+
 ARG GEOS_VERSION
 ENV GEOS_VERSION="${GEOS_VERSION:-3.12.1}"
 ENV GEOS_SRC_DIR="/usr/local/src/geos-${GEOS_VERSION}"
-RUN --mount=target="${GEOS_SRC_DIR}",type=cache,sharing=locked \
-    if [ ! -f "${GEOS_SRC_DIR}/cmake" ]; then \
-        wget -O - "https://download.osgeo.org/geos/geos-${GEOS_VERSION}.tar.bz2" | bunzip2 | tar x -C /usr/local/src; \
-    fi
-RUN --mount=target="${GEOS_SRC_DIR}",type=cache,sharing=locked \
-    mkdir -p "${GEOS_SRC_DIR}/build" \
+
+RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
+    cd "${DOWNLOADS_DIR}" \
+    && wget --timestamping \
+        "https://download.osgeo.org/geos/geos-${GEOS_VERSION}.tar.bz2"
+
+RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked,readonly \
+    tar -xjf "${DOWNLOADS_DIR}/geos-${GEOS_VERSION}.tar.bz2" -C /usr/local/src;
+
+RUN mkdir -p "${GEOS_SRC_DIR}/build" \
     && cd "${GEOS_SRC_DIR}/build" \
     && cmake ../ \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr/local \
     && make \
     && make install
+
 LABEL org.geos.version=${GEOS_VERSION}
 
 #------------------------------------------------------------------------------
-# Install a specific version of libgeotiff from source, ensuring it links 
+# Install a specific version of libgeotiff from source, ensuring it links
 # with our selected version of proj.  libgeotiff is a prerequisite for GDAL.
 #
 # Instructions: https://trac.osgeo.org/geotiff/ticket/17
 # Versions: https://github.com/OSGeo/libgeotiff/releases
 # Prerequisites: proj, libsqlite3-dev, libtiff-dev
 #------------------------------------------------------------------------------
+FROM geos as geotiff
+
 ARG GEOTIFF_VERSION
 ENV GEOTIFF_VERSION="${GEOTIFF_VERSION:-1.7.1}"
 ENV GEOTIFF_SRC_DIR="/usr/local/src/libgeotiff-${GEOTIFF_VERSION}"
-RUN --mount=target="${GEOTIFF_SRC_DIR}",type=cache,sharing=locked \
-    if [ ! -f "${GEOTIFF_SRC_DIR}/cmake" ]; then \
-        wget -O - "https://github.com/OSGeo/libgeotiff/releases/download/${GEOTIFF_VERSION}/libgeotiff-${GEOTIFF_VERSION}.tar.gz" | tar -xz -C /usr/local/src/; \
-    fi
-RUN --mount=target="${GEOTIFF_SRC_DIR}",type=cache,sharing=locked \
-    mkdir -p "${GEOTIFF_SRC_DIR}/build" \
+
+RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
+    cd "${DOWNLOADS_DIR}" \
+    && wget --timestamping \
+        "https://github.com/OSGeo/libgeotiff/releases/download/${GEOTIFF_VERSION}/libgeotiff-${GEOTIFF_VERSION}.tar.gz"
+
+RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked,readonly \
+    tar -xzf "${DOWNLOADS_DIR}/libgeotiff-${GEOTIFF_VERSION}.tar.gz" -C /usr/local/src/;
+
+RUN mkdir -p "${GEOTIFF_SRC_DIR}/build" \
     && cd "${GEOTIFF_SRC_DIR}/build" \
     && cmake ../ \
         -DCMAKE_BUILD_TYPE=Release \
@@ -359,6 +444,7 @@ RUN --mount=target="${GEOTIFF_SRC_DIR}",type=cache,sharing=locked \
         -DWITH_ZLIB=ON \
     && cmake --build . \
     && cmake --build . --target install
+
 LABEL org.libgeotiff.version=${GEOTIFF_VERSION}
 
 #------------------------------------------------------------------------------
@@ -374,15 +460,21 @@ LABEL org.libgeotiff.version=${GEOTIFF_VERSION}
 #        and libspatialite from source due to proj and geos dependencies.
 #        As none of our downstream apps need it yet, skip that for now.
 #------------------------------------------------------------------------------
+FROM geotiff as gdal
+
 ARG GDAL_VERSION
 ENV GDAL_VERSION="${GDAL_VERSION:-3.8.3}"
 ENV GDAL_SRC_DIR="/usr/local/src/gdal-${GDAL_VERSION}"
-RUN --mount=target="${GDAL_SRC_DIR}",type=cache,sharing=locked \
-    if [ ! -f "${GDAL_SRC_DIR}/cmake" ]; then \
-        wget -O - https://github.com/OSGeo/gdal/releases/download/v${GDAL_VERSION}/gdal-${GDAL_VERSION}.tar.gz | tar -xz -C /usr/local/src/; \
-    fi
-RUN --mount=target="${GDAL_SRC_DIR}",type=cache,sharing=locked \
-    mkdir -p "${GDAL_SRC_DIR}/build" \
+
+RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
+    cd "${DOWNLOADS_DIR}" \
+    && wget --timestamping \
+        "https://github.com/OSGeo/gdal/releases/download/v${GDAL_VERSION}/gdal-${GDAL_VERSION}.tar.gz"
+
+RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked,readonly \
+    tar -xzf "${DOWNLOADS_DIR}/gdal-${GDAL_VERSION}.tar.gz" -C /usr/local/src/
+
+RUN mkdir -p "${GDAL_SRC_DIR}/build" \
     && cd "${GDAL_SRC_DIR}/build" \
     && CC=mpicc CXX=mpic++ cmake ../ \
         -DCMAKE_BUILD_TYPE=Release \
@@ -409,6 +501,7 @@ RUN --mount=target="${GDAL_SRC_DIR}",type=cache,sharing=locked \
         -DGDAL_USE_ZLIB=ON \
     && cmake --build . \
     && cmake --build . --target install
+
 LABEL org.gdal.version=${GDAL_VERSION}
 
 #------------------------------------------------------------------------------
@@ -416,7 +509,7 @@ LABEL org.gdal.version=${GDAL_VERSION}
 # This extension handles installing some common python libraries which
 # depend on the NetCDF-related C libraries installed by the default target
 #------------------------------------------------------------------------------
-FROM default as python
+FROM gdal as python
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -426,7 +519,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip3 install --upgrade pip wheel setuptools
 
 COPY ./python "${PYTHON_HELPER_DIR}/"
+
 RUN --mount=type=cache,target=/root/.cache/pip \
-    chmod 0755 "${PYTHON_HELPER_DIR}/pip3-netcdf-install.sh" && \
-    ln -s "${PYTHON_HELPER_DIR}/pip3-netcdf-install.sh" /usr/local/bin/pip3-netcdf-install && \
-    pip3-netcdf-install
+    chmod 0755 "${PYTHON_HELPER_DIR}/pip3-netcdf-install.sh" \
+    && ln -s "${PYTHON_HELPER_DIR}/pip3-netcdf-install.sh" /usr/local/bin/pip3-netcdf-install \
+    && pip3-netcdf-install
