@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # This script can be called to ensure that python libraries corresponding with
 # the C and C++ libraries we have installed from source are installed AND
@@ -14,10 +15,13 @@ if [[ -z "${REQUIREMENTS_TXT}" ]] || [[ ! -f "${REQUIREMENTS_TXT}" ]]; then
     REQUIREMENTS_TXT="${THIS_DIR}/requirements.txt"
 fi
 
+pip3 install --upgrade \
+	pip wheel setuptools
+
 pip3 install \
 	--constraint "${REQUIREMENTS_TXT}" \
 	--no-binary mpi4py \
-	mpi4py Cython
+	mpi4py numpy Cython
 
 CPATH="${MPI_INCLUDE_PATH}" pip3 install \
 	--constraint "${REQUIREMENTS_TXT}" \
