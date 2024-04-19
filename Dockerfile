@@ -515,12 +515,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHON_HELPER_DIR='/usr/local/src/python-netcdf-helper'
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3 install --upgrade pip wheel setuptools
-
 COPY ./python "${PYTHON_HELPER_DIR}/"
+RUN chmod 0755 "${PYTHON_HELPER_DIR}/pip3-netcdf-install.sh" \
+    && ln -s "${PYTHON_HELPER_DIR}/pip3-netcdf-install.sh" /usr/local/bin/pip3-netcdf-install
 
+ARG PYTHON_NETCDF_INSTALL="NO"
 RUN --mount=type=cache,target=/root/.cache/pip \
-    chmod 0755 "${PYTHON_HELPER_DIR}/pip3-netcdf-install.sh" \
-    && ln -s "${PYTHON_HELPER_DIR}/pip3-netcdf-install.sh" /usr/local/bin/pip3-netcdf-install \
-    && pip3-netcdf-install
+    if [[ "${PYTHON_NETCDF_INSTALL}}" == "YES" ]]; then pip3-netcdf-install; fi

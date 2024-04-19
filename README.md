@@ -39,9 +39,11 @@ The values of these arguments will be available to derived images in environment
 | `HDF5_VERSION` | The version of the HDF 5 library (`libhdf5-dev`) that should be compiled for testing. This will be compiled with support for parallel I/O with MPI (`--enable-parallel`), for thread-safe operation (`--enable-threadsafe`) and for AWS S3 file storage (`--enable-ros3-vfd`).  <https://portal.hdfgroup.org/display/HDF5/HDF5> | `1.14.0` [released 2023-02-08](https://support.hdfgroup.org/ftp/HDF5/releases/) | `org.hdfgroup.hdf5.version` |
 | `AWS_SDK_CPP_REFSPEC` | The git branch or tag of the S3 library from the AWS C++ SDK that you want the NetCDF library to depend on. (Note: This SDK does not have formal release versions, only tags).  <https://github.com/aws/aws-sdk-cpp> | `main` (the latest available at the time of building) | `com.amazonaws.sdk.version` |
 | `NETCDF_VERSION` | The version of the netCDF-C library that should be installed. The library will be linked against the results of your `DAP_VERSION`, `HDF5_VERSION` and `AWS_SDK_CPP_REFSPEC` selections, and with support for parallel I/O, NcZarr files and byte-range queries to files on AWS S3 storage.  <https://docs.unidata.ucar.edu/netcdf-c/current/index.html> | `4.9.2` [released 2023-03-14](https://github.com/Unidata/netcdf-c/releases) | `edu.ucar.unidata.netcdf.version` |
+| `NETCDF_PATCH` | Whether a patch for [this known NetCDF-C issue](https://github.com/Unidata/netcdf-c/issues/2674) should be applied to the NetCDF C library's source code. Set it to any other value to disable patching (e.g. if the patch doesn't apply cleanly for your `NETCDF_VERSION`). | `YES` | |
 | `NCO_VERSION` | The version of the NetCDF Operators (NCO) that should be installed. These will be compiled against your choice of NetCDF library. <https://sourceforge.net/projects/nco/> | `5.1.7`, [released 2023-07-27](https://github.com/nco/nco/releases) | `net.sf.nco.version` |
 | `PROJ_VERSION` | The version of the PROJ library (`proj-bin, libproj-dev`) to install.  This depends on your CURL_VERSION, and is a prerequisite for GDAL. <https://proj.org/en/stable/index.html> | `9.2.1` [released 3023-06-01](https://proj.org/en/stable/download.html) | `org.proj.version` |
 | `GDAL_VERSION` | The version of GDAL that should be installed.   This will be compiled with support for (at minimum) geotiff, gif, hdf5, jpeg, json, netcdf, spatialite, sqlite, tiff and zarr, and will be linked against your chosen PROJ, HDF5 and NetCDF library versions.  It may also build with python or java bindings if those were pre-installed in your base image. <https://gdal.org/> | `3.7.2` [released 2023-09-13](https://gdal.org/download.html) | `org.gdal.version` |
+| `PYTHON_NETCDF_INSTALL` | Set this to `YES` if you want to pre-install python libraries (via pip3) that work with the C and C++ libraries we have installed from source. | `NO` | |
 
 
 &nbsp;
@@ -81,6 +83,11 @@ pip3-netcdf-install /path/to/your/requirements.txt
 ```
 
 Without this script (or similar care), you will find that your `pip install` steps download and install their own pre-packaged versions of `libnetcdf` or `libgdal` or similar, and those versions will not be the ones you expect or have the non-standard options like parallel-IO support.
+
+By default, this script is only installed during the image build, not run: this allows your own derived image
+to run it with your own set of library version constraints.
+
+To run it with a default set of library versions during the build, set the `PYTHON_NETCDF_INSTALL` build argument to a value of `YES`.
 
 
 ## Multistage Build
