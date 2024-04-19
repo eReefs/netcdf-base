@@ -107,6 +107,7 @@ ENV MPI_INCLUDE_PATH="${MPI_INCLUDE_PATH:-/usr/lib/x86_64-linux-gnu/openmpi/incl
 # to avoid re-downloading large/slow tarballs during repeated builds
 # this will hopefully speed up development
 ARG DOWNLOADS_DIR="/usr/local/src/downloads"
+RUN mkdir -p "${DOWNLOADS_DIR}"
 
 #------------------------------------------------------------------------------
 # Install a specific version of libcurl and curl from source
