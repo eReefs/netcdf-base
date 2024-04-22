@@ -40,6 +40,7 @@ docker build --pull \
     --build-arg "GDAL_VERSION=${GDAL_VERSION}" \
     --build-arg "HDF5_VERSION=${HDF5_VERSION}" \
     --build-arg "NETCDF_VERSION=${NETCDF_VERSION}" \
+    --build-arg "NETCDF_PATCH=${NETCDF_PATCH:-YES}" \
     --build-arg "NCO_VERSION=${NCO_VERSION}" \
     --build-arg "PROJ_VERSION=${PROJ_VERSION}" \
     --label "org.opencontainers.image.authors=${BUILD_AUTHORS:-CSIRO eReefs Team}" \
