@@ -5,7 +5,7 @@
 # Allow the base-image to be selected at build time.
 # This must be derived from an apt-compatible OS Image (e.g. debian, ubuntu etc)
 ARG BASE_IMAGE="debian:12-slim"
-FROM ${BASE_IMAGE} as base
+FROM ${BASE_IMAGE} AS base
 
 # Record the actual base image used from the FROM command as a label.
 ARG BASE_IMAGE
@@ -116,10 +116,10 @@ RUN mkdir -p "${DOWNLOADS_DIR}"
 # Versions: https://github.com/curl/curl/releases
 # prerequisites: libssl-dev, libpsl-dev
 #------------------------------------------------------------------------------
-FROM base as curl
+FROM base AS curl
 
 ARG CURL_VERSION
-ENV CURL_VERSION="${CURL_VERSION:-8.6.0}"
+ENV CURL_VERSION="${CURL_VERSION:-8.15.0}"
 ENV CURL_SRC_DIR="/usr/local/src/curl-${CURL_VERSION}"
 
 RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
@@ -152,10 +152,10 @@ LABEL se.curl.version=${CURL_VERSION}
 #       for the XDR functions in libtirpc instead of glibc, since they are
 #       no longer in glibc from Debian 12 onwards.
 #------------------------------------------------------------------------------
-FROM curl as dap
+FROM curl AS dap
 
 ARG DAP_VERSION
-ENV DAP_VERSION="${DAP_VERSION:-3.21.0-27}"
+ENV DAP_VERSION="${DAP_VERSION:-3.21.1}"
 ENV DAP_SRC_DIR="/usr/local/src/libdap4-${DAP_VERSION}"
 
 RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
@@ -190,10 +190,10 @@ LABEL org.opendap.dap.version=${DAP_VERSION}
 #       NetCDF files on AWS S3 Storage.
 #       S3-support in the NetCDF-C library.
 #------------------------------------------------------------------------------
-FROM dap as hdf5
+FROM dap AS hdf5
 
 ARG HDF5_VERSION
-ENV HDF5_VERSION="${HDF5_VERSION:-1.14.0}"
+ENV HDF5_VERSION="${HDF5_VERSION:-1.14.6}"
 ENV HDF5_SRC_DIR="/usr/local/src/hdf5-${HDF5_VERSION}"
 
 RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
@@ -234,7 +234,7 @@ LABEL org.hdfgroup.hdf5.version=${HDF5_VERSION}
 #        (AWS_SDK_CPP_REFSPEC) to ask for a specific version, and good
 #        enough if you're OK with the default (main branch) refspec.
 #------------------------------------------------------------------------------
-FROM hdf5 as s3
+FROM hdf5 AS s3
 
 ARG AWS_SDK_CPP_REFSPEC="main"
 ENV AWS_SDK_CPP_REFSPEC="${AWS_SDK_CPP_REFSPEC:-main}" \
@@ -281,14 +281,11 @@ LABEL com.amazonaws.sdk.version=${AWS_SDK_CPP_REFSPEC}
 #        that location the way it discovers it *needs* the openmpi headers.
 # NOTE3: LDFLAGS is used to make this build link with the AWS-SDK-CPP S3
 #        library compiled above in response to use of the --enable-s3 flag.
-# NOTE4: the patch is for https://github.com/Unidata/netcdf-c/issues/2674.
-#        If your NetCDF version does not patch cleanly, set the NETCDF_PATCH
-#        build arg to "NO" to skip the patch attempt.
 #------------------------------------------------------------------------------
-FROM s3 as netcdf
+FROM s3 AS netcdf
 
 ARG NETCDF_VERSION
-ENV NETCDF_VERSION="${NETCDF_VERSION:-4.9.2}"
+ENV NETCDF_VERSION="${NETCDF_VERSION:-4.9.3}"
 ENV NETCDF_SRC_DIR="/usr/local/src/netcdf-c-${NETCDF_VERSION}"
 
 RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
@@ -299,9 +296,10 @@ RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
 RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked,readonly \
     tar -xzf "${DOWNLOADS_DIR}/netcdf-c-${NETCDF_VERSION}.tar.gz" -C /usr/local/src/
 
-ARG NETCDF_PATCH="YES"
+# If necessary, apply the patch for https://github.com/Unidata/netcdf-c/issues/2674,
+# which was first reported for v4.9.0, and fixed in v4.9.3
 COPY ./patches/netcdf-c "${NETCDF_SRC_DIR}/patches"
-RUN if [[ "${NETCDF_PATCH}" == "YES" ]]; then \
+RUN if [[ "${NETCDF_VERSION}" =~ ^4.9.[012] ]]; then \
         cd "${NETCDF_SRC_DIR}" \
         && patch -p1 --forward < ./patches/0001-Fix-issue-2674.patch; \
     else \
@@ -330,10 +328,10 @@ LABEL edu.ucar.unidata.netcdf.version=${NETCDF_VERSION}
 # Versions: https://github.com/nco/nco/releases
 # Prerequisites: ANTLR, GSL, netCDF, OPeNDAP, UDUnits
 #------------------------------------------------------------------------------
-FROM netcdf as nco
+FROM netcdf AS nco
 
 ARG NCO_VERSION
-ENV NCO_VERSION="${NCO_VERSION:-5.1.9}"
+ENV NCO_VERSION="${NCO_VERSION:-5.3.4}"
 ENV NCO_SRC_DIR="/usr/local/src/nco-${NCO_VERSION}"
 
 RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
@@ -360,10 +358,10 @@ LABEL net.sf.nco.version=${NCO_VERSION}
 # Versions: https://proj.org/en/stable/download.html#current-release
 # Prerequisites: cmake, libsqlite3-dev, libtiff-dev
 #------------------------------------------------------------------------------
-FROM nco as proj
+FROM nco AS proj
 
 ARG PROJ_VERSION
-ENV PROJ_VERSION="${PROJ_VERSION:-9.3.1}"
+ENV PROJ_VERSION="${PROJ_VERSION:-9.6.2}"
 ENV PROJ_SRC_DIR="/usr/local/src/proj-${PROJ_VERSION}"
 
 RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
@@ -391,10 +389,10 @@ LABEL org.proj.version=${PROJ_VERSION}
 #
 # Instructions and versions: https://libgeos.org/usage/download/
 #------------------------------------------------------------------------------
-FROM proj as geos
+FROM proj AS geos
 
 ARG GEOS_VERSION
-ENV GEOS_VERSION="${GEOS_VERSION:-3.12.1}"
+ENV GEOS_VERSION="${GEOS_VERSION:-3.13.1}"
 ENV GEOS_SRC_DIR="/usr/local/src/geos-${GEOS_VERSION}"
 
 RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
@@ -423,10 +421,10 @@ LABEL org.geos.version=${GEOS_VERSION}
 # Versions: https://github.com/OSGeo/libgeotiff/releases
 # Prerequisites: proj, libsqlite3-dev, libtiff-dev
 #------------------------------------------------------------------------------
-FROM geos as geotiff
+FROM geos AS geotiff
 
 ARG GEOTIFF_VERSION
-ENV GEOTIFF_VERSION="${GEOTIFF_VERSION:-1.7.1}"
+ENV GEOTIFF_VERSION="${GEOTIFF_VERSION:-1.7.4}"
 ENV GEOTIFF_SRC_DIR="/usr/local/src/libgeotiff-${GEOTIFF_VERSION}"
 
 RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
@@ -462,10 +460,10 @@ LABEL org.libgeotiff.version=${GEOTIFF_VERSION}
 #        and libspatialite from source due to proj and geos dependencies.
 #        As none of our downstream apps need it yet, skip that for now.
 #------------------------------------------------------------------------------
-FROM geotiff as gdal
+FROM geotiff AS gdal
 
 ARG GDAL_VERSION
-ENV GDAL_VERSION="${GDAL_VERSION:-3.8.3}"
+ENV GDAL_VERSION="${GDAL_VERSION:-3.11.3}"
 ENV GDAL_SRC_DIR="/usr/local/src/gdal-${GDAL_VERSION}"
 
 RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
@@ -511,7 +509,7 @@ LABEL org.gdal.version=${GDAL_VERSION}
 # This extension handles installing some common python libraries which
 # depend on the NetCDF-related C libraries installed by the default target
 #------------------------------------------------------------------------------
-FROM gdal as python
+FROM gdal AS python
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

@@ -57,13 +57,13 @@ BASE_IMAGE="python:3.11-slim-bookworm"
 
 docker build --pull \
   --build-arg "BASE_IMAGE=${BASE_IMAGE}" \
-  --build-arg "CURL_VERSION=8.6.0" \
-  --build-arg "DAP_VERSION=3.21.0-27" \
-  --build-arg "GDAL_VERSION=3.8.3" \
-  --build-arg "HDF5_VERSION=1.14.0" \
-  --build-arg "NETCDF_VERSION=4.9.2" \
-  --build-arg "NCO_VERSION=5.1.9" \
-  --build-arg "PROJ_VERSION=9.3.1" \
+  --build-arg "CURL_VERSION=8.15.0" \
+  --build-arg "DAP_VERSION=3.21.1" \
+  --build-arg "GDAL_VERSION=3.11.3" \
+  --build-arg "HDF5_VERSION=1.14.6" \
+  --build-arg "NETCDF_VERSION=4.9.3" \
+  --build-arg "NCO_VERSION=5.3.4" \
+  --build-arg "PROJ_VERSION=9.6.2" \
   --tag "onaci/ereefs-netcdf-base:$(echo $BASE_IMAGE | tr ':' '-' | tr '/' '-')"
 ```
 
