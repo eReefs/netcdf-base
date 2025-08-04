@@ -179,7 +179,7 @@ LABEL org.opendap.dap.version=${DAP_VERSION}
 # Install a specific version of libhdf5 from source
 # Warning: This is *slow*!
 # Instructions: https://github.com/HDFGroup/hdf5/blob/develop/release_docs/INSTALL
-# Versions: https://support.hdfgroup.org/ftp/HDF5/releases/
+# Versions: https://github.com/HDFGroup/hdf5/releases
 # Prerequisites: zlib, MPI, MPI-IO
 #
 # Note: The --enable-parallel setting will be inherited by the NetCDF-C library
@@ -197,13 +197,12 @@ ENV HDF5_VERSION="${HDF5_VERSION:-1.14.6}"
 ENV HDF5_SRC_DIR="/usr/local/src/hdf5-${HDF5_VERSION}"
 
 RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
-    HDF_PATH_VERSION=$(echo "${HDF5_VERSION}" | sed -r 's/([[:digit:]]+\.[[:digit:]]+).*/\1/'); \
     cd "${DOWNLOADS_DIR}" \
     && wget --timestamping \
-        "https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-${HDF_PATH_VERSION}/hdf5-${HDF5_VERSION}/src/hdf5-${HDF5_VERSION}.tar.bz2"
+        "https://github.com/HDFGroup/hdf5/archive/refs/tags/hdf5_${HDF5_VERSION}.tar.gz"
 
 RUN  --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked,readonly \
-    tar -xjf "${DOWNLOADS_DIR}/hdf5-${HDF5_VERSION}.tar.bz2" -C /usr/local/src/
+    tar -xzf "${DOWNLOADS_DIR}/hdf5-${HDF5_VERSION}.tar.gz" -C /usr/local/src/
 
 RUN cd "${HDF5_SRC_DIR}" \
     && CPATH="${MPI_INCLUDE_PATH}" CC=mpicc ./configure \
