@@ -194,7 +194,7 @@ FROM dap AS hdf5
 
 ARG HDF5_VERSION
 ENV HDF5_VERSION="${HDF5_VERSION:-1.14.6}"
-ENV HDF5_SRC_DIR="/usr/local/src/hdf5-${HDF5_VERSION}"
+ENV HDF5_SRC_DIR="/usr/local/src/hdf5-hdf5_${HDF5_VERSION}"
 
 RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
     cd "${DOWNLOADS_DIR}" \
@@ -202,9 +202,10 @@ RUN --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked \
         "https://github.com/HDFGroup/hdf5/archive/refs/tags/hdf5_${HDF5_VERSION}.tar.gz"
 
 RUN  --mount=target="${DOWNLOADS_DIR}",type=cache,sharing=locked,readonly \
-    tar -xzf "${DOWNLOADS_DIR}/hdf5-${HDF5_VERSION}.tar.gz" -C /usr/local/src/
+    tar -xzf "${DOWNLOADS_DIR}/hdf5_${HDF5_VERSION}.tar.gz" -C /usr/local/src/
 
-RUN cd "${HDF5_SRC_DIR}" \
+RUN ls -alh /usr/local/src \
+    && cd "${HDF5_SRC_DIR}" \
     && CPATH="${MPI_INCLUDE_PATH}" CC=mpicc ./configure \
         --enable-parallel \
         --enable-threadsafe \
